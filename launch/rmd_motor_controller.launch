@@ -1,7 +1,8 @@
 <launch>
-    <node name="rmd_control_node" pkg="motor_rmd" type="rmd_x_controller.py" output="screen">
-        <param name="port" value="/dev/ttyUSB0"/>
-        <param name="baudrate" value="115200"/>ç
+    <arg name="port" default="/dev/ttyUSB1" />
+    <node name="$(anon rmd_control_node)" pkg="motor_rmd" type="rmd_x_controller.py" output="screen">
+        <param name="port" value="$(arg port)"/>
+        <param name="baudrate" value="115200"/>
         <param name="id" value="1"/>
         <param name="commands_file" value="$(find motor_rmd)/config/motor_commands.yaml"/>
     </node>
