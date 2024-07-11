@@ -1,0 +1,5 @@
+---
+int8 temperature
+uint8 brake
+float32 voltage
+string error_state

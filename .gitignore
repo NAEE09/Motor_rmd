@@ -1,0 +1,4 @@
+# Añadir las líneas para excluir archivos innecesarios
+build/
+devel/
+log/

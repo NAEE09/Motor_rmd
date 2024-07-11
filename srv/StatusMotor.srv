@@ -1,0 +1,6 @@
+# Request
+---
+int8 temperature
+float64 current
+int64 speed
+int64 position
