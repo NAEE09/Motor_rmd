@@ -60,6 +60,7 @@ find_package(catkin REQUIRED COMPONENTS
    ReadHomePosition.srv
    ReadPosition.srv
    SetPosition.srv
+   SetVelocity.srv
    SetTorque.srv
    StatusError.srv
    StatusMotor.srv

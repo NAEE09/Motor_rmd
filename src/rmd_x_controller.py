@@ -6,6 +6,7 @@ import struct
 import yaml
 from geometry_msgs.msg import Twist
 from motor_rmd.srv import SetPosition, SetPositionResponse
+from motor_rmd.srv import SetVelocity, SetVelocityResponse
 from motor_rmd.srv import SetTorque, SetTorqueResponse
 from motor_rmd.srv import StopMotor, StopMotorResponse
 from motor_rmd.srv import ReadHomePosition, ReadHomePositionResponse
@@ -57,8 +58,7 @@ class RMDControl:
         
         self.commands = self.load_commands(rospy.get_param('~commands_file'))
         
-        rospy.Subscriber('/rmd_motor/cmd_vel', Twist, self.cmd_vel_callback)
-
+        rospy.Service('/rmd_motor/cmd_vel', SetVelocity, self.handle_set_velocity)
         rospy.Service('/rmd_motor/set_position', SetPosition, self.handle_set_position)
         rospy.Service('/rmd_motor/set_torque', SetTorque, self.handle_set_torque)
         rospy.Service('/rmd_motor/stop_motor', StopMotor, self.handle_stop_motor)
@@ -88,9 +88,9 @@ class RMDControl:
         rospy.loginfo("Sending command: {}".format(packet.hex()))
         return response
 
-    def cmd_vel_callback(self, msg):
+    def handle_set_velocity(self, req):
         command = self.commands['set_speed'].copy()
-        speed = int(msg.angular.z)
+        speed = req.vel
         if  speed > self.max_speed: # Ajusta la escala si es necesario
             speed = self.max_speed
         if speed < -self.max_speed:
@@ -102,7 +102,11 @@ class RMDControl:
         command['data'][6] = speed_bytes[2]
         command['data'][7] = speed_bytes[3]
         response = self.send_command(command)
-        rospy.loginfo("Speed command response: {}".format(response))
+        if response is not None:
+            return SetVelocityResponse(success=True)
+        else:
+            return SetVelocityResponse(success=False)
+
 
     def handle_set_position(self, req):
         command = self.commands['set_position'].copy()
