@@ -4,6 +4,8 @@ import rospy
 import serial
 import struct
 import yaml
+import threading
+import time
 from geometry_msgs.msg import Twist
 from motor_rmd.srv import SetPosition, SetPositionResponse
 from motor_rmd.srv import SetVelocity, SetVelocityResponse
@@ -13,6 +15,7 @@ from motor_rmd.srv import ReadHomePosition, ReadHomePositionResponse
 from motor_rmd.srv import ReadPosition, ReadPositionResponse
 from motor_rmd.srv import StatusError, StatusErrorResponse
 from motor_rmd.srv import StatusMotor, StatusMotorResponse
+
 
 ERROR_STATE_DICT = {
     0x0002: "Motor stall",
@@ -46,17 +49,24 @@ class RMDControl:
         self.port = rospy.get_param('~port', '/dev/ttyUSB0')
         self.baudrate = rospy.get_param('~baudrate', 115200)
         self.id = rospy.get_param('~id', 1)
-        self.max_speed = 420 
+        self.max_speed = 420
+        self.latest_velocity = 0  # last velocity received 
+        self.lock = threading.Lock() 
         self.serial_connection = serial.Serial(
             port=self.port,
             baudrate=self.baudrate,
             parity=serial.PARITY_NONE,
             stopbits=serial.STOPBITS_ONE,
             bytesize=serial.EIGHTBITS,
-            timeout=1
+            timeout=0.1
         )
         
         self.commands = self.load_commands(rospy.get_param('~commands_file'))
+        #start thread
+        self.running = True
+        self.thread = threading.Thread(target=self.process_velocity)
+        self.thread.daemon = True
+        self.thread.start()
         
         rospy.Service('/rmd_motor/cmd_vel', SetVelocity, self.handle_set_velocity)
         rospy.Service('/rmd_motor/set_position', SetPosition, self.handle_set_position)
@@ -72,6 +82,8 @@ class RMDControl:
             return yaml.safe_load(file)
 
     def send_command(self, command):
+        self.serial_connection.reset_input_buffer()
+        self.serial_connection.reset_output_buffer()
         packet = struct.pack(
             'BBB8B',
             command['header'],
@@ -89,23 +101,29 @@ class RMDControl:
         return response
 
     def handle_set_velocity(self, req):
-        command = self.commands['set_speed'].copy()
-        speed = req.vel
-        if  speed > self.max_speed: # Ajusta la escala si es necesario
-            speed = self.max_speed
-        if speed < -self.max_speed:
-            speed = -self.max_speed
-        speed_units = speed * 100 #by 100 times according to the protocol,
-        speed_bytes = speed_units.to_bytes(4, byteorder='little', signed=True)
-        command['data'][4] = speed_bytes[0]
-        command['data'][5] = speed_bytes[1]
-        command['data'][6] = speed_bytes[2]
-        command['data'][7] = speed_bytes[3]
-        response = self.send_command(command)
-        if response is not None:
+        """ Servicio para recibir comandos de velocidad, pero solo guarda el último. """
+        with self.lock:
+            self.latest_velocity = req.vel  # Solo se guarda el último comando recibido
             return SetVelocityResponse(success=True)
-        else:
-            return SetVelocityResponse(success=False)
+        return SetVelocityResponse(success=False)
+
+    def process_velocity(self):
+        rate = rospy.Rate(10)
+        while not rospy.is_shutdown() and self.running:
+            with self.lock:
+                speed = max(-self.max_speed, min(self.max_speed, self.latest_velocity))
+
+            command = self.commands['set_speed'].copy()
+            
+            speed_units = speed * 100 #by 100 times according to the protocol,
+            speed_bytes = speed_units.to_bytes(4, byteorder='little', signed=True)
+            command['data'][4] = speed_bytes[0]
+            command['data'][5] = speed_bytes[1]
+            command['data'][6] = speed_bytes[2]
+            command['data'][7] = speed_bytes[3]
+            response = self.send_command(command)
+            rospy.loginfo("velocity send: {}".format(speed))
+            rate.sleep()
 
 
     def handle_set_position(self, req):
@@ -186,9 +204,14 @@ class RMDControl:
             speed = motor_speed,
             position = motor_position
         )
+    def stop(self):
+        self.running = False
+        self.thread.join()
+        self.serial_connection.close()
 
     def run(self):
         rospy.spin()
+        self.stop()
 
 if __name__ == '__main__':
     rmd_control = RMDControl()

@@ -1,7 +1,7 @@
 <launch>
-    <arg name="port" default="/dev/ttyUSB1" />
+    <arg name="motor_port" default="/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0" />
     <node name="$(anon rmd_control_node)" pkg="motor_rmd" type="rmd_x_controller.py" output="screen">
-        <param name="port" value="$(arg port)"/>
+        <param name="port" value="$(arg motor_port)"/>
         <param name="baudrate" value="115200"/>
         <param name="id" value="1"/>
         <param name="commands_file" value="$(find motor_rmd)/config/motor_commands.yaml"/>
